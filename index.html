@@ -231,6 +231,7 @@
         let dateSettings = {};
         let lockedMonths = {};
         let publicHolidays = {}; // 新增：存放國定假日資料
+        let pendingChanges = { schedule: {}, dateSettings: {}, lockedMonths: {} }; // 新增：紀錄本次修改了哪些格子
 
         const workingShifts = ['早1', '早2', '夜1', '夜2', '▲', '差'];
         const leaveShifts = ['例', '休', '特', '國', '喪', '換'];
@@ -317,16 +318,52 @@
                 const getRes = await getResp.json();
                 
                 if (getRes.status === 'success') {
-                    if (currentRole === 'employee' && selectedEmployee) {
-                        const myTempData = scheduleData[selectedEmployee] || {}; 
-                        Object.assign(dateSettings, getRes.dateSettings || {});
-                        scheduleData = getRes.scheduleData || {};
-                        scheduleData[selectedEmployee] = myTempData; // 智慧合併：保留網頁上的暫存不被蓋掉
-                    } else {
-                        Object.assign(dateSettings, getRes.dateSettings || {});
+                    // 1. 取得雲端最新資料並全面強制日期正規化 (解決時差與格式不對稱導致讀不到別人假表的問題)
+                    let serverSchedule = {};
+                    if (getRes.scheduleData) {
+                        for (const emp in getRes.scheduleData) {
+                            serverSchedule[emp] = {};
+                            for (let dKey in getRes.scheduleData[emp]) {
+                                serverSchedule[emp][normalizeDateStr(dKey)] = getRes.scheduleData[emp][dKey];
+                            }
+                        }
                     }
-                    // 預設為鎖定(true)未開放狀態
-                    lockedMonths[monthKey] = getRes.isMonthLocked !== undefined ? getRes.isMonthLocked : true;
+                    
+                    let serverDateSettings = {};
+                    if (getRes.dateSettings) {
+                        for (let dKey in getRes.dateSettings) {
+                            serverDateSettings[normalizeDateStr(dKey)] = getRes.dateSettings[dKey];
+                        }
+                    }
+
+                    let serverLocked = getRes.isMonthLocked !== undefined ? getRes.isMonthLocked : true;
+
+                    // 2. 智慧合併：只將本地「有更動過」的資料覆蓋上去，避免刪除別人的進度
+                    // 合併班表
+                    for (const emp in pendingChanges.schedule) {
+                        if (!serverSchedule[emp]) serverSchedule[emp] = {};
+                        for (const ds in pendingChanges.schedule[emp]) {
+                            serverSchedule[emp][ds] = pendingChanges.schedule[emp][ds];
+                        }
+                    }
+                    scheduleData = serverSchedule;
+
+                    // 合併日期設定
+                    for (const ds in pendingChanges.dateSettings) {
+                        if (pendingChanges.dateSettings[ds] === null) {
+                            delete serverDateSettings[ds];
+                        } else {
+                            serverDateSettings[ds] = pendingChanges.dateSettings[ds];
+                        }
+                    }
+                    dateSettings = serverDateSettings;
+
+                    // 合併鎖定狀態
+                    if (pendingChanges.lockedMonths[monthKey] !== undefined) {
+                        lockedMonths[monthKey] = pendingChanges.lockedMonths[monthKey];
+                    } else {
+                        lockedMonths[monthKey] = serverLocked;
+                    }
                 }
 
                 const { start, end } = getSchedulePeriod(currentYear, currentMonth);
@@ -347,6 +384,7 @@
                 const postRes = await postResp.json();
                 if (postRes.status === 'success') {
                     showToast('班表儲存成功！', 'success');
+                    pendingChanges = { schedule: {}, dateSettings: {}, lockedMonths: {} }; // 儲存成功後清空變更紀錄
                 } else {
                     throw new Error();
                 }
@@ -361,6 +399,7 @@
 
         async function loadMonthData(year, month) {
             const monthKey = `${year}-${month}`;
+            pendingChanges = { schedule: {}, dateSettings: {}, lockedMonths: {} }; // 切換月份時清空未儲存變更
             
             // 自動背景抓取本月區間所涵蓋年份的國定假日
             const { start, end } = getSchedulePeriod(year, month);
@@ -519,6 +558,11 @@
                         if (editable) sel.onchange = (e) => { 
                             if (!scheduleData[emp]) scheduleData[emp] = {};
                             scheduleData[emp][ds] = e.target.value; 
+                            
+                            // 紀錄這格被修改了
+                            if (!pendingChanges.schedule[emp]) pendingChanges.schedule[emp] = {};
+                            pendingChanges.schedule[emp][ds] = e.target.value;
+                            
                             renderTable(); 
                         };
                         td.appendChild(sel);
@@ -604,6 +648,7 @@
         function handleToggleLock(isOpen) { 
             const k = `${currentYear}-${currentMonth}`; 
             lockedMonths[k] = !isOpen; // isOpen 為 true 代表開放填寫 (鎖定為 false)
+            pendingChanges.lockedMonths[k] = !isOpen; // 紀錄鎖定狀態改變
             renderTable(); 
             showToast(lockedMonths[k] ? '已關閉員工填單' : '已開放員工填單，請記得點擊儲存', 'info');
         }
@@ -625,7 +670,19 @@
             setTimeout(() => m.classList.remove('opacity-0'), 10); 
         }
         function closeDateModal() { document.getElementById('dateModal').classList.add('opacity-0'); setTimeout(() => document.getElementById('dateModal').classList.add('hidden'), 200); }
-        function saveDateModal() { const ds = document.getElementById('dateModalDateStr').value; const n = document.getElementById('dateModalNote').value.trim(); const l = document.getElementById('dateModalLocked').checked; if (!n && !l) delete dateSettings[ds]; else dateSettings[ds] = { note: n, locked: l }; closeDateModal(); renderTable(); }
+        function saveDateModal() { 
+            const ds = document.getElementById('dateModalDateStr').value; 
+            const n = document.getElementById('dateModalNote').value.trim(); 
+            const l = document.getElementById('dateModalLocked').checked; 
+            if (!n && !l) {
+                delete dateSettings[ds]; 
+                pendingChanges.dateSettings[ds] = null; // null 代表刪除此設定
+            } else {
+                dateSettings[ds] = { note: n, locked: l }; 
+                pendingChanges.dateSettings[ds] = { note: n, locked: l };
+            }
+            closeDateModal(); renderTable(); 
+        }
     </script>
 </body>
 </html>
