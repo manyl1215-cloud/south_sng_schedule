@@ -2,218 +2,222 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ETTV 南部中心排班系統</title>
-    <!-- 引入 Tailwind CSS -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ETTV 南部 SNG班表</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        /* 隱藏捲軸但保持滾動功能 */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
-        /* 姓名與休假天數欄位雙重固定在左側 */
-        .sticky-name {
-            position: sticky;
-            left: 0;
-            background-color: white;
-            min-width: 80px;
-            max-width: 80px;
+        /* 手機版固定欄位寬度調整 */
+        :root {
+            --name-col-w: 70px;
+            --leave-col-w: 40px;
         }
-        .sticky-leave {
-            position: sticky;
-            left: 80px;
-            background-color: white;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.05);
-            min-width: 45px;
-            max-width: 45px;
+        @media (min-width: 640px) {
+            :root {
+                --name-col-w: 80px;
+                --leave-col-w: 45px;
+            }
         }
-        thead .sticky-name, thead .sticky-leave { z-index: 30; }
-        tbody .sticky-name, tbody .sticky-leave, .sticky-bottom-summary { z-index: 10; }
+
+        .sticky-name { 
+            position: sticky; 
+            left: 0; 
+            background-color: white; 
+            min-width: var(--name-col-w); 
+            max-width: var(--name-col-w); 
+            z-index: 20; 
+        }
+        .sticky-leave { 
+            position: sticky; 
+            left: var(--name-col-w); 
+            background-color: white; 
+            box-shadow: 2px 0 5px rgba(0,0,0,0.05); 
+            min-width: var(--leave-col-w); 
+            max-width: var(--leave-col-w); 
+            z-index: 20; 
+        }
+        thead .sticky-name, thead .sticky-leave { z-index: 40; }
         
-        .sticky-bottom-summary {
+        /* 上班人數底部固定統計列 */
+        .sticky-bottom-row td {
             position: sticky;
-            left: 0;
-            background-color: #eff6ff; /* blue-50 */
-            box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+            bottom: 0;
+            z-index: 30;
+            box-shadow: 0 -1px 3px rgba(0,0,0,0.1);
+        }
+        /* 確保左下角重疊處層級最高，不會被其他儲存格蓋住 */
+        .sticky-bottom-row .sticky-name,
+        .sticky-bottom-row .sticky-leave {
+            z-index: 50; 
+            background-color: #eff6ff; /* 對應 Tailwind bg-blue-50 */
         }
         
-        /* 班別顏色定義 */
-        .shift-morning { background-color: #dbeafe; color: #1e40af; } /* 早1, 早2 */
-        .shift-night { background-color: #6b7280; color: #000000; font-weight: bold; } /* 夜1, 夜2 (灰色底, 黑字) */
-        .shift-graveyard { background-color: #9ca3af; color: #000000; font-weight: bold; } /* ▲ 大夜 (淺灰底, 黑字) */
-        .shift-trip { background-color: #ccfbf1; color: #0f766e; } /* 差(出差) */
-        .shift-off { background-color: #fee2e2; color: #b91c1c; font-weight: bold; } /* 各類休假 */
-        .shift-pending { background-color: #ffedd5; color: #c2410c; border: 1px dashed #fdba74; } /* 排休(員工畫假) */
+        /* 班別樣式 */
+        .shift-morning { background-color: #dbeafe; color: #1e40af; } 
+        .shift-night { background-color: #6b7280; color: #000000; font-weight: bold; } 
+        .shift-graveyard { background-color: #9ca3af; color: #000000; font-weight: bold; } 
+        .shift-trip { background-color: #ccfbf1; color: #0f766e; } 
+        .shift-off { background-color: #fee2e2; color: #b91c1c; font-weight: bold; } 
+        .shift-pending { background-color: #ffedd5; color: #c2410c; border: 1px dashed #fdba74; } 
         
-        /* 表格儲存格基本樣式 */
-        .cell-base {
-            width: 50px;
-            height: 40px;
-            cursor: pointer;
-            transition: all 0.1s;
-            text-align: center;
-            vertical-align: middle;
-            font-size: 0.875rem;
-            user-select: none;
-        }
-        .cell-base:hover { filter: brightness(0.95); }
-        .cell-disabled { cursor: not-allowed; background-color: #f8fafc; color: #cbd5e1; }
+        .cell-base { height: 44px; text-align: center; vertical-align: middle; font-size: 0.8rem; user-select: none; }
+        
+        /* 防止 iOS 輸入框自動放大 */
+        select, input { font-size: 16px !important; }
     </style>
 </head>
-<body class="bg-slate-50 font-sans text-slate-800 h-screen flex flex-col">
+<body class="bg-slate-50 font-sans text-slate-800 h-screen flex flex-col overflow-hidden">
 
     <!-- 頂部導覽列 -->
-    <nav class="bg-gradient-to-r from-blue-800 via-blue-600 to-cyan-500 text-white shadow-lg shrink-0 z-30 relative border-b-4 border-yellow-400">
-        <div class="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16">
-                <div class="flex items-center">
-                    <!-- SNG 轉播車 SVG -->
-                    <svg class="w-12 h-12 mr-3 drop-shadow-md" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M45 10 A 15 15 0 0 1 55 20" stroke="#facc15" stroke-width="3" stroke-linecap="round" class="animate-ping" style="animation-duration: 2s;" />
-                        <path d="M40 15 A 8 8 0 0 1 46 21" stroke="#facc15" stroke-width="3" stroke-linecap="round" class="animate-pulse" />
-                        <path d="M35 30 L25 18" stroke="#cbd5e1" stroke-width="3" stroke-linecap="round" />
-                        <path d="M18 15 Q25 25 32 12" stroke="#cbd5e1" stroke-width="3" fill="none" stroke-linecap="round" />
-                        <circle cx="28" cy="18" r="3" fill="#ef4444" />
-                        <path d="M10 30 H42 C45 30 48 33 49 36 L54 44 H10 V30 Z" fill="#ffffff" />
-                        <path d="M54 44 H10 V48 H54 Z" fill="#e2e8f0" />
-                        <path d="M38 32 H46 L49 39 H38 V32 Z" fill="#93c5fd" />
-                        <path d="M28 32 H36 V39 H28 V32 Z" fill="#93c5fd" />
-                        <rect x="10" y="41" width="44" height="1.5" fill="#ef4444" />
-                        <rect x="10" y="43.5" width="44" height="1.5" fill="#3b82f6" />
-                        <circle cx="20" cy="48" r="5" fill="#1e293b" />
-                        <circle cx="20" cy="48" r="2" fill="#cbd5e1" />
-                        <circle cx="45" cy="48" r="5" fill="#1e293b" />
-                        <circle cx="45" cy="48" r="2" fill="#cbd5e1" />
-                    </svg>
-                    <span class="font-black text-2xl tracking-wider hidden sm:inline drop-shadow-md">ETTV 南部中心排班系統</span>
-                    <span class="font-black text-xl tracking-wider sm:hidden drop-shadow-md">ETTV 班表</span>
-                </div>
-                <div class="flex items-center space-x-4">
-                    <div class="flex items-center bg-blue-900 rounded-lg p-1">
-                        <button id="btnEmployeeMode" onclick="setRole('employee')" class="px-3 py-1 rounded-md text-sm font-medium transition bg-white text-blue-900 shadow">員工前台</button>
-                        <button id="btnAdminMode" onclick="requestAdminAccess()" class="px-3 py-1 rounded-md text-sm font-medium text-white hover:text-blue-200 transition">主管後台 <i class="fa-solid fa-lock text-[10px] ml-1"></i></button>
-                    </div>
+    <nav class="bg-gradient-to-r from-blue-800 via-blue-600 to-cyan-500 text-white shadow-lg shrink-0 z-50 relative border-b-2 border-yellow-400">
+        <div class="max-w-full mx-auto px-3 h-14 flex justify-between items-center">
+            <div class="flex items-center">
+                <!-- 升級版 SNG 衛星轉播車 -->
+                <svg class="w-8 h-8 sm:w-10 sm:h-10 mr-2 drop-shadow-md" viewBox="0 0 64 64" fill="none">
+                    <!-- 傳輸電波 -->
+                    <path d="M44 10 A 12 12 0 0 1 54 20" stroke="#facc15" stroke-width="3" stroke-linecap="round" class="animate-ping" style="animation-duration: 2s;" />
+                    <path d="M40 14 A 8 8 0 0 1 48 22" stroke="#facc15" stroke-width="3" stroke-linecap="round" class="animate-pulse" />
+                    
+                    <!-- 天線底座與支架 -->
+                    <path d="M22 28 L28 16" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" />
+                    <!-- 天線碟盤 -->
+                    <path d="M22 12 Q 32 14 36 22" stroke="#e2e8f0" stroke-width="4" stroke-linecap="round" />
+                    <!-- 發射器接收點 -->
+                    <circle cx="30" cy="18" r="2.5" fill="#ef4444" />
+                    
+                    <!-- 車廂與車頭主體 -->
+                    <path d="M8 30 H42 C45 30 48 33 49 36 L54 44 H8 V30 Z" fill="#ffffff" />
+                    <path d="M54 44 H8 V48 H54 Z" fill="#e2e8f0" />
+                    
+                    <!-- 東森紅藍經典線條 -->
+                    <rect x="8" y="41" width="46" height="1.5" fill="#ef4444" />
+                    <rect x="8" y="43.5" width="46" height="1.5" fill="#3b82f6" />
+                    
+                    <!-- 輪胎 -->
+                    <circle cx="18" cy="48" r="5" fill="#334155" stroke="#ffffff" stroke-width="2" />
+                    <circle cx="46" cy="48" r="5" fill="#334155" stroke="#ffffff" stroke-width="2" />
+                    <circle cx="18" cy="48" r="2" fill="#94a3b8" />
+                    <circle cx="46" cy="48" r="2" fill="#94a3b8" />
+                </svg>
+                <span class="font-black text-lg sm:text-xl tracking-tighter sm:tracking-wider">ETTV 南部 SNG班表</span>
+            </div>
+            <div class="flex items-center">
+                <div class="flex items-center bg-blue-900/50 rounded-lg p-0.5">
+                    <button id="btnEmployeeMode" onclick="setRole('employee')" class="px-2 py-1 rounded-md text-xs font-bold transition bg-white text-blue-900 shadow">員工</button>
+                    <button id="btnAdminMode" onclick="requestAdminAccess()" class="px-2 py-1 rounded-md text-xs font-bold text-white transition">主管</button>
                 </div>
             </div>
         </div>
     </nav>
 
-    <!-- 今日出勤面板 -->
-    <div class="bg-blue-50 border-b border-blue-100 px-4 py-2 shrink-0 flex flex-wrap items-center gap-3 z-10 relative">
-        <div class="font-bold text-blue-800 text-sm whitespace-nowrap bg-blue-100 px-2 py-1 rounded shadow-sm">
-            <i class="fa-solid fa-calendar-day mr-1"></i>今日 (<span id="todayDateDisplay"></span>)
+    <!-- 今日出勤 -->
+    <div class="bg-blue-50 border-b border-blue-100 px-3 py-1.5 shrink-0 flex items-center gap-2 z-10 overflow-hidden">
+        <div class="font-bold text-blue-800 text-[10px] whitespace-nowrap bg-blue-100 px-1.5 py-0.5 rounded shadow-sm">
+            今日 <span id="todayDateDisplay"></span>
         </div>
-        <div class="flex-1 text-sm flex flex-wrap gap-x-4 gap-y-2 items-center" id="todayRosterContent">
-            <!-- 內容動態生成 -->
-        </div>
+        <div class="flex-1 text-[11px] flex gap-x-3 items-center overflow-x-auto no-scrollbar whitespace-nowrap" id="todayRosterContent"></div>
     </div>
 
-    <!-- 控制列 -->
-    <div class="bg-white border-b border-slate-200 px-4 py-3 shrink-0 flex flex-wrap items-center justify-between gap-4 z-20 relative">
-        <div class="flex items-center space-x-4">
-            <div class="flex items-center space-x-2 bg-slate-100 rounded-lg p-1">
-                <button onclick="changeMonth(-1)" class="p-2 text-slate-600 hover:bg-slate-200 rounded"><i class="fa-solid fa-chevron-left"></i></button>
-                <span id="currentMonthDisplay" class="font-bold text-lg min-w-[100px] text-center">2026 年 4 月</span>
-                <button onclick="changeMonth(1)" class="p-2 text-slate-600 hover:bg-slate-200 rounded"><i class="fa-solid fa-chevron-right"></i></button>
+    <!-- 控制區域 -->
+    <div class="bg-white border-b border-slate-200 px-3 py-2 shrink-0 flex flex-col gap-2 z-20">
+        <div class="flex items-center justify-between gap-2">
+            <!-- 月份切換 -->
+            <div class="flex items-center bg-slate-100 rounded-lg p-0.5">
+                <button onclick="changeMonth(-1)" class="p-1.5 text-slate-600"><i class="fa-solid fa-chevron-left"></i></button>
+                <span id="currentMonthDisplay" class="font-bold text-sm min-w-[80px] text-center"></span>
+                <button onclick="changeMonth(1)" class="p-1.5 text-slate-600"><i class="fa-solid fa-chevron-right"></i></button>
             </div>
-
-            <div id="employeeSelector" class="flex items-center space-x-2">
-                <label class="text-sm font-medium text-slate-600">我是：</label>
-                <select id="currentUser" onchange="renderTable()" class="border-slate-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 p-2 border">
-                    <option value="" disabled selected>請選擇姓名</option>
-                </select>
-                <span class="text-xs text-orange-600 ml-2 bg-orange-100 px-2 py-1 rounded hidden sm:inline-block" id="employeeDrawHint"><i class="fa-solid fa-pen-to-square mr-1"></i>請選擇姓名後排假</span>
-                <span class="text-xs text-red-600 ml-2 bg-red-100 px-2 py-1 rounded hidden font-bold" id="employeeLockHint"><i class="fa-solid fa-lock mr-1"></i>本月班表已鎖定</span>
-            </div>
-            <div id="adminHint" class="hidden text-xs text-blue-600 bg-blue-50 border border-blue-200 px-2 py-1 rounded items-center">
-                <i class="fa-solid fa-circle-info mr-1"></i>點擊上方日期表頭可設定國定假日與鎖定
-            </div>
-        </div>
-
-        <div class="flex items-center space-x-4">
-            <button id="btnLockMonth" onclick="toggleMonthLock()" class="hidden px-3 py-2 rounded-md text-sm font-medium transition items-center shadow-sm"></button>
-            <div class="hidden lg:flex space-x-3 text-xs flex-wrap justify-end">
-                <span class="flex items-center"><i class="fa-solid fa-lock text-red-500 mr-1 text-[10px]"></i>禁休</span>
-                <span class="flex items-center"><span class="w-3 h-3 inline-block bg-orange-100 border border-orange-300 rounded-sm mr-1"></span>排休</span>
-                <span class="flex items-center"><span class="w-3 h-3 inline-block shift-morning rounded-sm mr-1"></span>早1/早2</span>
-                <span class="flex items-center"><span class="w-3 h-3 inline-block shift-night rounded-sm mr-1"></span>夜1/夜2</span>
-                <span class="flex items-center"><span class="w-3 h-3 inline-flex items-center justify-center shift-graveyard rounded-sm mr-1 text-[8px]">▲</span>大夜</span>
-            </div>
-            <button onclick="saveData()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition flex items-center shadow-sm">
-                <i class="fa-solid fa-cloud-arrow-up mr-2"></i>儲存班表
+            <!-- 儲存按鈕 -->
+            <button onclick="saveDataWithSync()" class="bg-blue-600 text-white px-3 py-1.5 rounded-md text-xs font-bold shadow-md flex items-center">
+                <i class="fa-solid fa-cloud-arrow-up mr-1"></i>儲存班表
             </button>
         </div>
-    </div>
 
-    <!-- 班表區域 -->
-    <div class="flex-1 overflow-hidden p-4 bg-slate-50 relative">
-        <div class="h-full w-full bg-white rounded-xl shadow-sm border border-slate-200 overflow-auto no-scrollbar relative">
-            <table class="w-full border-collapse min-w-max">
-                <thead class="bg-slate-100 sticky top-0 z-20">
-                    <tr id="headerRow"></tr>
-                </thead>
-                <tbody id="tableBody" class="divide-y divide-slate-200"></tbody>
-            </table>
+        <div class="flex items-center justify-between">
+            <div id="employeeSelector" class="flex items-center gap-2 flex-1">
+                <select id="currentUser" onchange="renderTable()" class="flex-1 border-slate-300 rounded-md text-xs p-1.5 border bg-white">
+                    <option value="" disabled selected>請選擇您的姓名</option>
+                </select>
+                <!-- 狀態提示與主管控制鈕 -->
+                <span class="text-[10px] text-emerald-600 bg-emerald-100 px-1.5 py-1 rounded hidden font-bold whitespace-nowrap" id="employeeDrawHint"><i class="fa-solid fa-pen-to-square mr-1"></i>開放填單中</span>
+                <span class="text-[10px] text-red-600 bg-red-100 px-1.5 py-1 rounded hidden font-bold whitespace-nowrap" id="employeeLockHint"><i class="fa-solid fa-lock mr-1"></i>未開放填單</span>
+                
+                <!-- 主管專用：開放填單開關 -->
+                <label id="adminToggleLock" class="hidden items-center cursor-pointer shrink-0 border border-slate-200 bg-white px-2 py-1 rounded-md shadow-sm transition hover:bg-slate-50">
+                    <span id="adminToggleLabel" class="text-[11px] font-bold mr-2 select-none">狀態</span>
+                    <div class="relative flex items-center">
+                        <input type="checkbox" id="adminToggleCheckbox" class="sr-only" onchange="handleToggleLock(this.checked)">
+                        <div id="adminToggleTrack" class="block w-9 h-5 rounded-full transition-colors duration-300 bg-slate-300 shadow-inner"></div>
+                        <div id="adminToggleDot" class="absolute left-[2px] bg-white w-4 h-4 rounded-full shadow transition-transform duration-300 pointer-events-none"></div>
+                    </div>
+                </label>
+            </div>
         </div>
+    </div> <!-- 控制區域結束 -->
+
+    <!-- 班表主體 -->
+    <!-- 加上 min-w-max 確保內容不被壓縮，產生水平捲軸 -->
+    <div class="flex-1 overflow-auto bg-white relative shadow-inner">
+        <table class="w-full min-w-max text-left border-collapse bg-white">
+            <thead class="sticky top-0 z-40 bg-slate-50 shadow-sm">
+                <tr id="headerRow"></tr>
+            </thead>
+            <tbody id="tableBody">
+            </tbody>
+        </table>
     </div>
 
-    <!-- 主管登入 Modal -->
-    <div id="pwdModal" class="fixed inset-0 bg-slate-900 bg-opacity-50 hidden z-[80] flex items-center justify-center transition-opacity opacity-0">
-        <div class="bg-white rounded-xl shadow-2xl w-80 p-6 transform transition-all scale-95" id="pwdModalContent">
-            <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center"><i class="fa-solid fa-user-shield text-blue-600 mr-2"></i>主管登入</h3>
-            <p class="text-xs text-slate-500 mb-3">請輸入管理員密碼 (預設：12345)</p>
-            <input type="password" id="adminPwd" class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" onkeypress="if(event.key === 'Enter') verifyPwd()">
-            <div class="flex justify-end space-x-3">
-                <button onclick="closePwdModal()" class="px-4 py-2 text-sm font-medium text-slate-600 border border-slate-300 hover:bg-slate-50 rounded-md transition">取消</button>
-                <button onclick="verifyPwd()" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition">登入</button>
+    <!-- 主管密碼 Modal -->
+    <div id="pwdModal" class="fixed inset-0 bg-slate-900/60 hidden z-[100] flex items-center justify-center transition-all opacity-0 px-6">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-xs p-5 transform scale-95" id="pwdModalContent">
+            <h3 class="text-base font-bold mb-3">主管登入</h3>
+            <input type="password" id="adminPwd" placeholder="請輸入密碼" class="w-full border rounded-md px-3 py-2 mb-4" onkeypress="if(event.key === 'Enter') verifyPwd()">
+            <div class="flex justify-end gap-2">
+                <button onclick="closePwdModal()" class="px-4 py-2 text-sm text-slate-500 border rounded-md">取消</button>
+                <button onclick="verifyPwd()" class="px-4 py-2 text-sm text-white bg-blue-600 rounded-md">登入</button>
             </div>
         </div>
     </div>
 
     <!-- 日期設定 Modal -->
-    <div id="dateModal" class="fixed inset-0 bg-slate-900 bg-opacity-50 hidden z-[60] flex items-center justify-center transition-opacity opacity-0">
-        <div class="bg-white rounded-xl shadow-2xl w-80 p-6 transform transition-all scale-95" id="dateModalContent">
-            <div class="flex justify-between items-center mb-4 border-b pb-3">
-                <h3 class="text-lg font-bold text-slate-800">日期設定</h3>
-                <button onclick="closeDateModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <p id="dateModalTitle" class="text-sm font-semibold text-slate-600 mb-4 bg-slate-100 p-2 rounded text-center"></p>
+    <div id="dateModal" class="fixed inset-0 bg-slate-900/60 hidden z-[90] flex items-center justify-center transition-all opacity-0 px-6">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-xs p-5" id="dateModalContent">
+            <h3 id="dateModalTitle" class="text-base font-bold mb-3"></h3>
             <input type="hidden" id="dateModalDateStr">
-            <div class="mb-5">
-                <label class="block text-sm font-medium text-slate-700 mb-1">節日名稱/備註</label>
-                <input type="text" id="dateModalNote" class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm">
+            <div class="mb-4">
+                <label class="block text-xs font-medium mb-1">備註/節日</label>
+                <input type="text" id="dateModalNote" class="w-full border rounded-md px-2 py-1.5 text-sm">
             </div>
-            <div class="mb-6 p-3 bg-red-50 border border-red-100 rounded-md flex items-start">
-                <input type="checkbox" id="dateModalLocked" class="mt-1">
-                <div class="ml-2 text-sm">
-                    <label for="dateModalLocked" class="font-medium text-red-800">鎖定此日期</label>
-                    <p class="text-red-600 text-xs">員工將無法在此日畫假。</p>
-                </div>
+            <div class="mb-5 flex items-center gap-2">
+                <input type="checkbox" id="dateModalLocked" class="w-4 h-4">
+                <label for="dateModalLocked" class="text-sm font-bold text-red-600">禁止畫假 (鎖定)</label>
             </div>
-            <div class="flex justify-end space-x-3">
-                <button onclick="closeDateModal()" class="px-4 py-2 text-sm font-medium text-slate-600 border border-slate-300 rounded-md transition">取消</button>
-                <button onclick="saveDateModal()" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition">儲存</button>
+            <div class="flex justify-end gap-2">
+                <button onclick="closeDateModal()" class="px-4 py-2 text-sm text-slate-500 border rounded-md">取消</button>
+                <button onclick="saveDateModal()" class="px-4 py-2 text-sm text-white bg-blue-600 rounded-md">確定</button>
             </div>
         </div>
     </div>
 
     <!-- Toast 提示 -->
-    <div id="toast" class="fixed bottom-5 right-5 transform translate-y-20 opacity-0 transition-all duration-300 ease-in-out z-[90] pointer-events-none">
-        <div id="toastContent" class="bg-slate-800 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3">
+    <div id="toast" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transform scale-90 opacity-0 transition-all duration-300 z-[110] pointer-events-none w-auto">
+        <div class="bg-slate-800/90 text-white px-5 py-3 rounded-full shadow-2xl flex items-center gap-2 whitespace-nowrap">
             <i id="toastIcon" class="fa-solid fa-circle-check"></i>
-            <span id="toastMessage"></span>
+            <span id="toastMessage" class="text-sm font-bold"></span>
         </div>
     </div>
 
     <script>
-        // --- 設定與狀態 ---
-        const API_URL = 'https://script.google.com/macros/s/AKfycbwl4kHYm0mOu4HwPrYgTOWkEBn5oJZ4Gdog2uV_P60bODo6f7U0r0kx5g1SJn4eRG_i0Q/exec'; 
+        const API_URL = 'https://script.google.com/macros/s/AKfycbyJbUZ6FThZ1rUYjQExKoFSOrT-1QFJum27cUqG7eLleZ9uuWahQ3f0--VCDa5Df39VmA/exec'; 
         
         let currentRole = 'employee'; 
         let currentYear = new Date().getFullYear();
         let currentMonth = new Date().getMonth() + 1; 
         let selectedEmployee = '';
-        let currentPeriodDates = []; 
         
         const employees = [
             { id: '0504', name: '滿昱綸', hireDate: '06.01' },
@@ -226,11 +230,11 @@
         let scheduleData = {};
         let dateSettings = {};
         let lockedMonths = {};
+        let publicHolidays = {}; // 新增：存放國定假日資料
 
         const workingShifts = ['早1', '早2', '夜1', '夜2', '▲', '差'];
         const leaveShifts = ['例', '休', '特', '國', '喪', '換'];
 
-        // 核心修復：統一日期格式（補零 YYYY-MM-DD）
         function formatDateStr(date) {
             const y = date.getFullYear();
             const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -238,303 +242,347 @@
             return `${y}-${m}-${d}`;
         }
 
-        // 核心修復：將不規則日期字串標準化
         function normalizeDateStr(str) {
             if (!str) return "";
             const d = new Date(str);
-            if (isNaN(d.getTime())) return str;
-            return formatDateStr(d);
+            return isNaN(d.getTime()) ? str : formatDateStr(d);
         }
 
-        // --- 初始化 ---
+        async function fetchHolidays(year) {
+            if (publicHolidays[year] !== undefined) return;
+            publicHolidays[year] = null; // 標記為已發起請求，避免重複讀取
+            try {
+                // 串接台灣國定假日開源 API (等同 Google 行事曆的國定假日)
+                const res = await fetch(`https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/${year}.json`);
+                if (res.ok) {
+                    const data = await res.json();
+                    publicHolidays[year] = {};
+                    data.forEach(day => {
+                        const y = day.date.substring(0, 4);
+                        const m = day.date.substring(4, 6);
+                        const d = day.date.substring(6, 8);
+                        const ds = `${y}-${m}-${d}`;
+                        if (day.isHoliday || day.description) {
+                            publicHolidays[year][ds] = {
+                                isHoliday: day.isHoliday,
+                                description: day.description
+                            };
+                        }
+                    });
+                    renderTable(); // 抓取完畢後重新渲染班表
+                }
+            } catch (err) {
+                console.log('無法載入國定假日:', year);
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             const select = document.getElementById('currentUser');
             employees.forEach(emp => {
                 const opt = document.createElement('option');
-                opt.value = emp.name;
-                opt.textContent = emp.name;
+                opt.value = emp.name; opt.textContent = emp.name;
                 select.appendChild(opt);
             });
-
+            
+            // 自動判斷「今天」落在我們排班邏輯中的哪一個月份區間
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // 歸零時間以便準確比對日期
+            const { start, end } = getSchedulePeriod(currentYear, currentMonth);
+            
+            if (today < start) {
+                // 如果今天早於本月區間起始日，代表還在上個月的班表內
+                if (currentMonth === 1) { currentMonth = 12; currentYear--; }
+                else { currentMonth--; }
+            } else if (today > end) {
+                // 如果今天大於本月區間結束日，代表已經進入下個月的班表
+                if (currentMonth === 12) { currentMonth = 1; currentYear++; }
+                else { currentMonth++; }
+            }
+            
             updateMonthDisplay();
-            setRole('employee');
             loadMonthData(currentYear, currentMonth);
         });
 
-        // --- 功能控制 ---
-        function setRole(role) {
-            currentRole = role;
-            const btnEmp = document.getElementById('btnEmployeeMode');
-            const btnAdmin = document.getElementById('btnAdminMode');
-            const empSelector = document.getElementById('employeeSelector');
-            const adminHint = document.getElementById('adminHint');
-            const btnLockMonth = document.getElementById('btnLockMonth');
+        async function saveDataWithSync() {
+            const btn = document.querySelector('button[onclick="saveDataWithSync()"]');
+            const original = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>處理中';
+            btn.disabled = true;
 
-            if (role === 'employee') {
-                btnEmp.className = 'px-3 py-1 rounded-md text-sm font-medium bg-white text-blue-900 shadow';
-                btnAdmin.className = 'px-3 py-1 rounded-md text-sm font-medium text-white hover:text-blue-200 transition';
-                empSelector.style.display = 'flex';
-                adminHint.style.display = 'none';
-                btnLockMonth.classList.add('hidden');
-            } else {
-                btnAdmin.className = 'px-3 py-1 rounded-md text-sm font-medium bg-white text-blue-900 shadow';
-                btnEmp.className = 'px-3 py-1 rounded-md text-sm font-medium text-white hover:text-blue-200 transition';
-                empSelector.style.display = 'none';
-                adminHint.style.display = 'flex';
-                btnLockMonth.classList.remove('hidden');
-            }
-            renderTable();
-        }
-
-        async function changeMonth(delta) {
-            currentMonth += delta;
-            if (currentMonth > 12) { currentMonth = 1; currentYear++; }
-            if (currentMonth < 1) { currentMonth = 12; currentYear--; }
-            updateMonthDisplay();
-            
-            // 重置快取並渲染
-            renderTable();
-            await loadMonthData(currentYear, currentMonth);
-        }
-
-        function updateMonthDisplay() {
-            document.getElementById('currentMonthDisplay').textContent = `${currentYear} 年 ${currentMonth} 月`;
-        }
-
-        // --- 核心運算 ---
-        function getFirstSunday(year, month) {
-            let d = new Date(year, month - 1, 1);
-            let dayOfWeek = d.getDay();
-            if (dayOfWeek !== 0) d.setDate(d.getDate() + (7 - dayOfWeek));
-            return d;
-        }
-
-        function getSchedulePeriod(year, month) {
-            let start = getFirstSunday(year, month);
-            let nextMonthYear = month === 12 ? year + 1 : year;
-            let nextMonth = month === 12 ? 1 : month + 1;
-            let nextFirstSunday = getFirstSunday(nextMonthYear, nextMonth);
-            let end = new Date(nextFirstSunday);
-            end.setDate(end.getDate() - 1);
-            return { start, end };
-        }
-
-        // --- 渲染畫面 ---
-        function renderTable() {
-            const { start, end } = getSchedulePeriod(currentYear, currentMonth);
-            const headerRow = document.getElementById('headerRow');
-            const tableBody = document.getElementById('tableBody');
             const monthKey = `${currentYear}-${currentMonth}`;
-            const isMonthLocked = lockedMonths[monthKey] || false;
-            
-            selectedEmployee = document.getElementById('currentUser').value;
+            showToast('正在與雲端同步...', 'info');
 
-            const btnLockMonth = document.getElementById('btnLockMonth');
-            const empDrawHint = document.getElementById('employeeDrawHint');
-            const empLockHint = document.getElementById('employeeLockHint');
-            
-            if (isMonthLocked) {
-                btnLockMonth.className = "bg-red-100 text-red-700 px-3 py-2 rounded-md text-sm font-bold flex items-center";
-                btnLockMonth.innerHTML = '<i class="fa-solid fa-lock mr-2"></i>解除本月鎖定';
-                if (currentRole === 'employee') { empDrawHint.classList.add('hidden'); empLockHint.classList.remove('hidden'); }
-            } else {
-                btnLockMonth.className = "bg-slate-200 text-slate-700 px-3 py-2 rounded-md text-sm font-medium flex items-center";
-                btnLockMonth.innerHTML = '<i class="fa-solid fa-unlock mr-2"></i>鎖定本月班表';
-                if (currentRole === 'employee') { empDrawHint.classList.remove('hidden'); empLockHint.classList.add('hidden'); }
-            }
-
-            currentPeriodDates = [];
-            const dates = [];
-            let loopDate = new Date(start);
-            while (loopDate <= end) {
-                dates.push(new Date(loopDate));
-                currentPeriodDates.push(formatDateStr(loopDate));
-                loopDate.setDate(loopDate.getDate() + 1);
-            }
-
-            headerRow.innerHTML = `
-                <th class="sticky-name py-2 text-center bg-slate-100 text-[11px] border-b border-r">編號<br><span class="text-sm">姓名</span><br>入職</th>
-                <th class="sticky-leave py-2 text-center bg-slate-100 text-[11px] border-b border-r">休假</th>
-            `;
-            
-            dates.forEach(date => {
-                const fullDateStr = formatDateStr(date);
-                const dayOfWeek = date.getDay();
-                const settings = dateSettings[fullDateStr] || {};
-                const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-                
-                let bg = settings.locked ? (currentRole === 'admin' ? 'bg-yellow-200' : 'bg-yellow-100') : (isWeekend ? 'bg-pink-100' : 'bg-slate-100');
-                const textCls = dayOfWeek === 0 ? 'text-red-500' : (dayOfWeek === 6 ? 'text-blue-600' : 'text-slate-600');
-                
-                headerRow.innerHTML += `
-                    <th class="py-2 px-1 border-b border-r text-center relative h-[60px] align-top ${bg} ${currentRole === 'admin' ? 'cursor-pointer' : ''}" 
-                        ${currentRole === 'admin' ? `onclick="openDateModal('${fullDateStr}')"` : ''}>
-                        <div class="text-xs ${textCls}">${['日','一','二','三','四','五','六'][dayOfWeek]}</div>
-                        <div class="font-bold">${date.getMonth() + 1}/${date.getDate()}</div>
-                        ${settings.note ? `<div class="text-[10px] text-amber-800 font-bold truncate">${settings.note}</div>` : ''}
-                        ${settings.locked ? `<i class="fa-solid fa-lock text-red-500 absolute top-1 right-1 text-[8px]"></i>` : ''}
-                    </th>
-                `;
-            });
-
-            tableBody.innerHTML = '';
-            employees.forEach(empObj => {
-                const emp = empObj.name;
-                if (!scheduleData[emp]) scheduleData[emp] = {};
-                const empData = scheduleData[emp];
-
-                let offCount = 0;
-                let pendingCount = 0;
-                dates.forEach(d => {
-                    const ds = formatDateStr(d);
-                    const s = empData[ds] || '';
-                    if (leaveShifts.includes(s)) offCount++;
-                    if (s === '排休') pendingCount++;
-                });
-
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td class="sticky-name py-1 text-center bg-white border-r">
-                        <div class="text-[9px] text-slate-400">${empObj.id}</div>
-                        <div class="font-bold text-[14px]">${empObj.name}</div>
-                        <div class="text-[9px] text-slate-400">${empObj.hireDate}</div>
-                    </td>
-                    <td class="sticky-leave py-1 text-center bg-white border-r align-middle">
-                        <div class="text-[15px] font-bold text-red-600">${offCount + pendingCount}</div>
-                        ${pendingCount > 0 ? `<div class="text-[8px] text-orange-600 leading-none">含排休${pendingCount}</div>` : ''}
-                    </td>
-                `;
-
-                dates.forEach(date => {
-                    const fullDateStr = formatDateStr(date);
-                    const shift = empData[fullDateStr] || '';
-                    const isLocked = dateSettings[fullDateStr]?.locked;
-                    const isHoliday = date.getDay() === 0 || date.getDay() === 6 || isLocked;
-                    
-                    const td = document.createElement('td');
-                    td.className = `border-r p-0 relative h-10 ${isLocked ? 'bg-yellow-50' : (isHoliday ? 'bg-pink-50' : '')}`;
-                    
-                    const editable = currentRole === 'admin' || (currentRole === 'employee' && emp === selectedEmployee && !isMonthLocked && !isLocked && (shift === '' || shift === '排休'));
-                    
-                    const sel = document.createElement('select');
-                    sel.disabled = !editable;
-                    sel.className = `w-full h-full appearance-none bg-transparent border-0 text-center text-sm font-medium cursor-pointer ${shift === '排休' ? 'shift-pending' : (leaveShifts.includes(shift) ? 'shift-off' : (shift === '▲' ? 'shift-graveyard' : (workingShifts.includes(shift) ? (shift.includes('夜') ? 'shift-night' : 'shift-morning') : '')))}`;
-                    sel.style.textAlignLast = "center";
-                    
-                    const opts = currentRole === 'admin' ? ['', '早1', '早2', '夜1', '夜2', '▲', '差', '例', '休', '特', '國', '喪', '換', '排休'] : (editable ? ['', '排休'] : [shift]);
-                    opts.forEach(o => {
-                        const op = document.createElement('option');
-                        op.value = o; op.textContent = o;
-                        if (o === shift) op.selected = true;
-                        sel.appendChild(op);
-                    });
-
-                    if (editable) sel.onchange = (e) => { 
-                        if (!scheduleData[emp]) scheduleData[emp] = {};
-                        scheduleData[emp][fullDateStr] = e.target.value; 
-                        renderTable(); 
-                    };
-                    td.appendChild(sel);
-                    tr.appendChild(td);
-                });
-                tableBody.appendChild(tr);
-            });
-            
-            const countRow = document.createElement('tr');
-            countRow.className = "bg-blue-50";
-            countRow.innerHTML = `<td colspan="2" class="sticky-bottom-summary py-2 font-bold text-center border-r">上班人數</td>`;
-            dates.forEach(date => {
-                const ds = formatDateStr(date);
-                let count = 0;
-                employees.forEach(e => { if (workingShifts.includes(scheduleData[e.name]?.[ds])) count++; });
-                countRow.innerHTML += `<td class="text-center font-bold border-r ${count > 0 ? 'text-blue-700' : 'text-slate-400'}">${count}</td>`;
-            });
-            tableBody.appendChild(countRow);
-            updateTodayRoster();
-        }
-
-        // --- 資料連線 ---
-        async function loadMonthData(year, month) {
-            if (!API_URL) return renderTable();
-            const monthKey = `${year}-${month}`; // 試算表工作表名通常不補零
-            showToast('同步資料中...', 'info');
-            
             try {
-                const response = await fetch(`${API_URL}?month=${monthKey}&_t=${Date.now()}`);
-                const res = await response.json();
+                const getResp = await fetch(`${API_URL}?month=${monthKey}&_t=${Date.now()}`);
+                const getRes = await getResp.json();
                 
-                if (res.status === 'success') {
-                    lockedMonths[monthKey] = res.isMonthLocked || false;
-                    
-                    // 標準化日期設定格式
-                    if (res.dateSettings) {
-                        for (let d in res.dateSettings) {
-                            dateSettings[normalizeDateStr(d)] = res.dateSettings[d];
-                        }
+                if (getRes.status === 'success') {
+                    if (currentRole === 'employee' && selectedEmployee) {
+                        const myTempData = scheduleData[selectedEmployee] || {}; 
+                        Object.assign(dateSettings, getRes.dateSettings || {});
+                        scheduleData = getRes.scheduleData || {};
+                        scheduleData[selectedEmployee] = myTempData; // 智慧合併：保留網頁上的暫存不被蓋掉
+                    } else {
+                        Object.assign(dateSettings, getRes.dateSettings || {});
                     }
-                    
-                    // 標準化排班資料：確保名稱與日期格式完全對應
-                    if (res.scheduleData) {
-                        for (const emp in res.scheduleData) {
-                            if (!scheduleData[emp]) scheduleData[emp] = {};
-                            const empDataFromServer = res.scheduleData[emp];
-                            for (let dateKey in empDataFromServer) {
-                                // 將來自 server 的日期 Key (如 2026-4-1) 標準化為 2026-04-01
-                                scheduleData[emp][normalizeDateStr(dateKey)] = empDataFromServer[dateKey];
-                            }
-                        }
-                    }
-                    showToast('資料載入成功', 'success');
+                    // 預設為鎖定(true)未開放狀態
+                    lockedMonths[monthKey] = getRes.isMonthLocked !== undefined ? getRes.isMonthLocked : true;
+                }
+
+                const { start, end } = getSchedulePeriod(currentYear, currentMonth);
+                const datesInPeriod = [];
+                let loop = new Date(start);
+                while (loop <= end) { datesInPeriod.push(formatDateStr(loop)); loop.setDate(loop.getDate() + 1); }
+
+                const postResp = await fetch(API_URL, {
+                    method: 'POST',
+                    mode: 'cors',
+                    body: JSON.stringify({
+                        monthKey, 
+                        isMonthLocked: lockedMonths[monthKey] !== undefined ? lockedMonths[monthKey] : true,
+                        dateSettings, dates: datesInPeriod, scheduleData
+                    })
+                });
+                
+                const postRes = await postResp.json();
+                if (postRes.status === 'success') {
+                    showToast('班表儲存成功！', 'success');
                 } else {
-                    showToast('本月尚無存檔', 'info');
+                    throw new Error();
                 }
             } catch (err) {
-                console.error('Load Error:', err);
-                showToast('連線失敗！請檢查網路', 'error');
+                showToast('網路錯誤，請重試', 'error');
             } finally {
+                btn.innerHTML = original;
+                btn.disabled = false;
                 renderTable();
             }
         }
 
-        async function saveData() {
-            const monthKey = `${currentYear}-${currentMonth}`;
-            const btn = document.querySelector('button[onclick="saveData()"]');
-            const original = btn.innerHTML;
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>傳輸中...';
-            btn.disabled = true;
+        async function loadMonthData(year, month) {
+            const monthKey = `${year}-${month}`;
+            
+            // 自動背景抓取本月區間所涵蓋年份的國定假日
+            const { start, end } = getSchedulePeriod(year, month);
+            fetchHolidays(start.getFullYear());
+            if (start.getFullYear() !== end.getFullYear()) {
+                fetchHolidays(end.getFullYear());
+            }
 
+            showToast('同步中...', 'info');
             try {
-                const res = await fetch(API_URL, {
-                    method: 'POST',
-                    mode: 'cors',
-                    headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify({
-                        monthKey, 
-                        isMonthLocked: lockedMonths[monthKey] || false,
-                        dateSettings, 
-                        dates: currentPeriodDates, 
-                        scheduleData
-                    })
-                });
-                
-                const result = await res.json();
-                if (result.status === 'success') showToast('儲存成功', 'success');
-                else throw new Error();
-            } catch (err) {
-                showToast('儲存失敗', 'error');
-            } finally {
-                btn.innerHTML = original;
-                btn.disabled = false;
+                const response = await fetch(`${API_URL}?month=${monthKey}&_t=${Date.now()}`);
+                const res = await response.json();
+                if (res.status === 'success') {
+                    // 若無紀錄則預設為鎖定(true)
+                    lockedMonths[monthKey] = res.isMonthLocked !== undefined ? res.isMonthLocked : true;
+                    Object.assign(dateSettings, res.dateSettings || {});
+                    if (res.scheduleData) {
+                        for (const emp in res.scheduleData) {
+                            if (!scheduleData[emp]) scheduleData[emp] = {};
+                            // 修正日期格式後再塞入
+                            for (let dKey in res.scheduleData[emp]) {
+                                scheduleData[emp][normalizeDateStr(dKey)] = res.scheduleData[emp][dKey];
+                            }
+                        }
+                    }
+                }
+            } catch (err) {} finally {
+                renderTable();
             }
         }
 
-        // --- 介面輔助 ---
-        function updateTodayRoster() {
-            const now = new Date();
-            const ds = formatDateStr(now);
-            const displayEl = document.getElementById('todayDateDisplay');
-            if(displayEl) displayEl.textContent = `${now.getMonth() + 1}/${now.getDate()}`;
+        function renderTable() {
+            const { start, end } = getSchedulePeriod(currentYear, currentMonth);
+            const tableBody = document.getElementById('tableBody');
+            const headerRow = document.getElementById('headerRow');
+            const monthKey = `${currentYear}-${currentMonth}`;
             
+            // 預設未開放 (true)，直到主管點擊開放
+            const isMonthLocked = lockedMonths[monthKey] !== undefined ? lockedMonths[monthKey] : true;
+            selectedEmployee = document.getElementById('currentUser').value;
+
+            const adminToggleLock = document.getElementById('adminToggleLock');
+            const adminToggleCheckbox = document.getElementById('adminToggleCheckbox');
+            const adminToggleTrack = document.getElementById('adminToggleTrack');
+            const adminToggleDot = document.getElementById('adminToggleDot');
+            const adminToggleLabel = document.getElementById('adminToggleLabel');
+            const drawHint = document.getElementById('employeeDrawHint');
+            const lockHint = document.getElementById('employeeLockHint');
+            
+            if (isMonthLocked) {
+                // 關閉狀態 (灰色開關靠左)
+                if(adminToggleCheckbox) adminToggleCheckbox.checked = false;
+                if(adminToggleTrack) { adminToggleTrack.classList.remove('bg-emerald-500'); adminToggleTrack.classList.add('bg-slate-300'); }
+                if(adminToggleDot) { adminToggleDot.classList.remove('translate-x-4'); }
+                if(adminToggleLabel) { adminToggleLabel.textContent = "已關閉填單"; adminToggleLabel.className = "text-[11px] font-bold mr-2 text-slate-500 select-none"; }
+                
+                if (currentRole === 'employee' && drawHint && lockHint) { 
+                    drawHint.classList.add('hidden'); 
+                    lockHint.classList.remove('hidden'); 
+                }
+            } else {
+                // 開放狀態 (綠色開關靠右)
+                if(adminToggleCheckbox) adminToggleCheckbox.checked = true;
+                if(adminToggleTrack) { adminToggleTrack.classList.remove('bg-slate-300'); adminToggleTrack.classList.add('bg-emerald-500'); }
+                if(adminToggleDot) { adminToggleDot.classList.add('translate-x-4'); }
+                if(adminToggleLabel) { adminToggleLabel.textContent = "開放填單中"; adminToggleLabel.className = "text-[11px] font-bold mr-2 text-emerald-600 select-none"; }
+                
+                if (currentRole === 'employee' && drawHint && lockHint) { 
+                    drawHint.classList.remove('hidden'); 
+                    lockHint.classList.add('hidden'); 
+                }
+            }
+            
+            // 獨立控制主管開關的顯示與隱藏
+            if (adminToggleLock) {
+                if (currentRole === 'admin') {
+                    adminToggleLock.classList.remove('hidden');
+                    adminToggleLock.classList.add('flex');
+                } else {
+                    adminToggleLock.classList.remove('flex');
+                    adminToggleLock.classList.add('hidden');
+                }
+            }
+
+            const dates = [];
+            let loop = new Date(start);
+            while (loop <= end) { dates.push(new Date(loop)); loop.setDate(loop.getDate() + 1); }
+
+            // 渲染表頭
+            if (headerRow) {
+                headerRow.innerHTML = `<th class="sticky-name py-2 text-center bg-slate-50 text-[9px] border-b border-r">姓名</th><th class="sticky-leave py-2 text-center bg-slate-50 text-[9px] border-b border-r">休假</th>`;
+                dates.forEach(d => {
+                    const ds = formatDateStr(d);
+                    const s = dateSettings[ds] || {};
+                    const wk = d.getDay();
+                    const hol = (publicHolidays[d.getFullYear()] || {})[ds];
+                    
+                    // 判斷是否為放假日 (如果是補班日，isDayOff 會強制為 false)
+                    const isDayOff = hol ? hol.isHoliday : (wk === 0 || wk === 6);
+                    const bg = s.locked ? (currentRole === 'admin' ? 'bg-yellow-200' : 'bg-yellow-100') : (isDayOff ? 'bg-pink-100' : 'bg-white');
+                    
+                    let tc = 'text-slate-400';
+                    if (hol && hol.isHoliday) tc = 'text-red-500'; // 國定假日標紅字
+                    else if (wk === 0) tc = 'text-red-500'; // 週日標紅字
+                    else if (wk === 6 && isDayOff) tc = 'text-blue-600'; // 正常週六標藍字
+
+                    const noteText = s.note || (hol ? hol.description : '');
+
+                    headerRow.innerHTML += `<th class="w-[44px] min-w-[44px] border-b border-r text-center relative align-top ${bg} ${currentRole === 'admin' ? 'cursor-pointer' : ''}" ${currentRole === 'admin' ? `onclick="openDateModal('${ds}')"` : ''}>
+                        <div class="text-[9px] scale-90 ${tc}">${['日','一','二','三','四','五','六'][wk]}</div>
+                        <div class="font-bold text-[10px]">${d.getDate()}</div>
+                        ${noteText ? `<div class="text-[8px] text-amber-800 scale-75 leading-none mt-0.5 truncate">${noteText}</div>` : ''}
+                    </th>`;
+                });
+            }
+
+            // 渲染表格內容
+            if (tableBody) {
+                tableBody.innerHTML = '';
+                employees.forEach(empObj => {
+                    const emp = empObj.name;
+                    const empData = scheduleData[emp] || {};
+                    let count = 0, pCount = 0;
+                    dates.forEach(d => { const s = empData[formatDateStr(d)] || ''; if (leaveShifts.includes(s)) count++; if (s === '排休') pCount++; });
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `<td class="sticky-name py-2 text-center bg-white border-r">
+                        <div class="font-bold text-[12px] leading-tight">${emp}</div>
+                        <div class="text-[8px] text-slate-300 scale-90">${empObj.id}</div>
+                    </td><td class="sticky-leave py-2 text-center bg-white border-r">
+                        <div class="text-[14px] font-bold text-red-600">${count+pCount}</div>
+                    </td>`;
+
+                    dates.forEach(date => {
+                        const ds = formatDateStr(date);
+                        const shift = empData[ds] || '';
+                        const isDateLocked = dateSettings[ds]?.locked;
+                        
+                        // 判斷休假日以改變底色
+                        const wk = date.getDay();
+                        const hol = (publicHolidays[date.getFullYear()] || {})[ds];
+                        const isDayOff = hol ? hol.isHoliday : (wk === 0 || wk === 6);
+                        
+                        const td = document.createElement('td');
+                        td.className = `border-r p-0 h-[44px] ${isDateLocked ? 'bg-yellow-50' : (isDayOff ? 'bg-pink-50' : '')}`;
+                        
+                        const editable = currentRole === 'admin' || (currentRole === 'employee' && emp === selectedEmployee && !isMonthLocked && !isDateLocked && (shift === '' || shift === '排休'));
+                        const sel = document.createElement('select');
+                        sel.disabled = !editable;
+                        sel.className = `w-full h-full appearance-none bg-transparent border-0 text-center text-xs font-bold ${shift === '排休' ? 'shift-pending' : (leaveShifts.includes(shift) ? 'shift-off' : (shift === '▲' ? 'shift-graveyard' : (workingShifts.includes(shift) ? (shift.includes('夜') ? 'shift-night' : 'shift-morning') : '')))}`;
+                        sel.style.textAlignLast = "center";
+                        
+                        const opts = currentRole === 'admin' ? ['', '早1', '早2', '夜1', '夜2', '▲', '差', '例', '休', '特', '國', '喪', '換', '排休'] : (editable ? ['', '排休'] : [shift]);
+                        opts.forEach(o => { const op = document.createElement('option'); op.value = o; op.textContent = o; if (o === shift) op.selected = true; sel.appendChild(op); });
+
+                        if (editable) sel.onchange = (e) => { 
+                            if (!scheduleData[emp]) scheduleData[emp] = {};
+                            scheduleData[emp][ds] = e.target.value; 
+                            renderTable(); 
+                        };
+                        td.appendChild(sel);
+                        tr.appendChild(td);
+                    });
+                    tableBody.appendChild(tr);
+                });
+                
+                // 上班人數統計列 (固定在底部，拆分左側固定欄以維持滾動效果)
+                const countRow = document.createElement('tr');
+                countRow.className = "sticky-bottom-row";
+                countRow.innerHTML = `
+                    <td class="sticky-name py-2 font-bold text-center border-r border-t-2 border-blue-200 text-xs text-blue-800">合計</td>
+                    <td class="sticky-leave py-2 font-bold text-center border-r border-t-2 border-blue-200 text-[10px] text-blue-800">上班</td>
+                `;
+                
+                dates.forEach(date => {
+                    const ds = formatDateStr(date);
+                    let count = 0;
+                    employees.forEach(e => { if (workingShifts.includes(scheduleData[e.name]?.[ds])) count++; });
+                    countRow.innerHTML += `<td class="text-center font-bold border-r border-t-2 border-blue-200 bg-blue-50 text-xs ${count > 0 ? 'text-blue-700' : 'text-slate-400'}">${count}</td>`;
+                });
+                tableBody.appendChild(countRow);
+            }
+            
+            updateTodayRoster();
+        }
+
+        function getSchedulePeriod(y, m) {
+            let start = getFirstSunday(y, m);
+            let nY = m === 12 ? y + 1 : y, nM = m === 12 ? 1 : m + 1;
+            let end = new Date(getFirstSunday(nY, nM));
+            end.setDate(end.getDate() - 1);
+            return { start, end };
+        }
+        function getFirstSunday(y, m) { let d = new Date(y, m - 1, 1); let wk = d.getDay(); if (wk !== 0) d.setDate(d.getDate() + (7 - wk)); return d; }
+        function setRole(r) { 
+            currentRole = r; 
+            const btnEmp = document.getElementById('btnEmployeeMode');
+            const btnAdmin = document.getElementById('btnAdminMode');
+            if(r === 'employee') {
+                btnEmp.className = 'px-2 py-1 rounded-md text-xs font-bold transition bg-white text-blue-900 shadow';
+                btnAdmin.className = 'px-2 py-1 rounded-md text-xs font-bold text-white transition';
+            } else {
+                btnAdmin.className = 'px-2 py-1 rounded-md text-xs font-bold transition bg-white text-blue-900 shadow';
+                btnEmp.className = 'px-2 py-1 rounded-md text-xs font-bold text-white transition';
+            }
+            renderTable(); 
+        }
+        function changeMonth(d) { currentMonth += d; if (currentMonth > 12) { currentMonth = 1; currentYear++; } if (currentMonth < 1) { currentMonth = 12; currentYear--; } updateMonthDisplay(); loadMonthData(currentYear, currentMonth); }
+        function updateMonthDisplay() { document.getElementById('currentMonthDisplay').textContent = `${currentYear} 年 ${currentMonth} 月`; }
+        
+        function showToast(m, t) { 
+            const toast = document.getElementById('toast'); 
+            document.getElementById('toastMessage').textContent = m; 
+            const icon = document.getElementById('toastIcon');
+            icon.className = t==='success' ? 'fa-solid fa-circle-check text-green-400' : (t==='error' ? 'fa-solid fa-circle-xmark text-red-400' : 'fa-solid fa-circle-info text-blue-400');
+            toast.classList.remove('opacity-0', 'scale-90'); 
+            setTimeout(() => toast.classList.add('opacity-0', 'scale-90'), 2500); 
+        }
+
+        function updateTodayRoster() {
+            const ds = formatDateStr(new Date());
+            document.getElementById('todayDateDisplay').textContent = `${new Date().getMonth()+1}/${new Date().getDate()}`;
             let w = [], t = [], o = [];
             employees.forEach(e => {
                 const s = scheduleData[e.name]?.[ds] || '';
@@ -543,89 +591,41 @@
                 else if (leaveShifts.includes(s)) o.push(`${e.name}(${s})`);
             });
             const c = document.getElementById('todayRosterContent');
-            if(!c) return;
-            c.innerHTML = (w.length+t.length+o.length === 0) ? '<span class="text-slate-400 italic">今日無排班</span>' : 
-                (w.length ? `<div class="mr-4"><span class="text-blue-600 font-bold">上班:</span> ${w.join(',')}</div>` : '') +
-                (t.length ? `<div class="mr-4"><span class="text-teal-600 font-bold">出差:</span> ${t.join(',')}</div>` : '') +
-                (o.length ? `<div><span class="text-red-600 font-bold">休假:</span> ${o.join(',')}</div>` : '');
+            c.innerHTML = (w.length+t.length+o.length === 0) ? '<span class="text-slate-400 italic">今日無紀錄</span>' : 
+                (w.length ? `<div class="bg-blue-100/50 px-1 rounded"><span class="text-blue-600 font-bold">上:</span> ${w.join(',')}</div>` : '') +
+                (t.length ? `<div class="bg-teal-100/50 px-1 rounded"><span class="text-teal-600 font-bold">差:</span> ${t.join(',')}</div>` : '') +
+                (o.length ? `<div class="bg-red-100/50 px-1 rounded"><span class="text-red-600 font-bold">休:</span> ${o.join(',')}</div>` : '');
         }
 
-        function requestAdminAccess() {
-            if (currentRole === 'admin') return;
-            const m = document.getElementById('pwdModal');
-            m.classList.remove('hidden');
-            setTimeout(() => { m.classList.remove('opacity-0'); document.getElementById('pwdModalContent').classList.remove('scale-95'); document.getElementById('adminPwd').focus(); }, 10);
-        }
-
-        function verifyPwd() {
-            // 修改密碼為 admin
-            if (document.getElementById('adminPwd').value === 'admin') { 
-                closePwdModal(); 
-                setRole('admin'); 
-                showToast('登入成功，已切換至主管模式', 'success'); 
-            }
-            else { 
-                showToast('密碼錯誤', 'error'); 
-                document.getElementById('adminPwd').value = ''; 
-            }
-        }
-
-        function closePwdModal() { 
-            const m = document.getElementById('pwdModal');
-            m.classList.add('opacity-0');
-            document.getElementById('pwdModalContent').classList.add('scale-95');
-            setTimeout(() => m.classList.add('hidden'), 200); 
-        }
-
-        function toggleMonthLock() {
-            const k = `${currentYear}-${currentMonth}`;
-            lockedMonths[k] = !lockedMonths[k];
-            renderTable();
-            showToast(lockedMonths[k] ? '班表已鎖定' : '班表已解鎖', 'info');
-        }
-
-        function openDateModal(ds) {
-            const m = document.getElementById('dateModal');
-            const parts = ds.split('-');
-            document.getElementById('dateModalTitle').textContent = `${parts[0]}年${parts[1]}月${parts[2]}日`;
-            document.getElementById('dateModalDateStr').value = ds;
-            const s = dateSettings[ds] || { note: '', locked: false };
-            document.getElementById('dateModalNote').value = s.note || '';
-            document.getElementById('dateModalLocked').checked = s.locked || false;
-            m.classList.remove('hidden');
-            setTimeout(() => { 
-                m.classList.remove('opacity-0'); 
-                document.getElementById('dateModalContent').classList.remove('scale-95'); 
-            }, 10);
-        }
-
-        function closeDateModal() { 
-            const m = document.getElementById('dateModal');
-            m.classList.add('opacity-0');
-            document.getElementById('dateModalContent').classList.add('scale-95');
-            setTimeout(() => m.classList.add('hidden'), 200); 
+        function requestAdminAccess() { if (currentRole === 'admin') return; const m = document.getElementById('pwdModal'); m.classList.remove('hidden'); setTimeout(() => { m.classList.remove('opacity-0'); document.getElementById('pwdModalContent').classList.remove('scale-95'); document.getElementById('adminPwd').focus(); }, 10); }
+        function verifyPwd() { if (document.getElementById('adminPwd').value === 'admin') { closePwdModal(); setRole('admin'); showToast('登入成功', 'success'); } else { showToast('密碼錯誤', 'error'); } }
+        function closePwdModal() { document.getElementById('pwdModal').classList.add('opacity-0'); setTimeout(() => document.getElementById('pwdModal').classList.add('hidden'), 200); }
+        
+        function handleToggleLock(isOpen) { 
+            const k = `${currentYear}-${currentMonth}`; 
+            lockedMonths[k] = !isOpen; // isOpen 為 true 代表開放填寫 (鎖定為 false)
+            renderTable(); 
+            showToast(lockedMonths[k] ? '已關閉員工填單' : '已開放員工填單，請記得點擊儲存', 'info');
         }
         
-        function saveDateModal() {
-            const ds = document.getElementById('dateModalDateStr').value;
-            const n = document.getElementById('dateModalNote').value.trim();
-            const l = document.getElementById('dateModalLocked').checked;
-            if (!n && !l) delete dateSettings[ds]; else dateSettings[ds] = { note: n, locked: l };
-            closeDateModal(); renderTable();
+        function openDateModal(ds) { 
+            const m = document.getElementById('dateModal'); 
+            document.getElementById('dateModalDateStr').value = ds; 
+            document.getElementById('dateModalTitle').textContent = ds; 
+            
+            const s = dateSettings[ds] || { note: '', locked: false }; 
+            const y = parseInt(ds.split('-')[0]);
+            const hol = (publicHolidays[y] || {})[ds];
+            
+            document.getElementById('dateModalNote').value = s.note || ''; 
+            document.getElementById('dateModalNote').placeholder = hol ? hol.description : '自訂備註...';
+            document.getElementById('dateModalLocked').checked = s.locked || false; 
+            
+            m.classList.remove('hidden'); 
+            setTimeout(() => m.classList.remove('opacity-0'), 10); 
         }
-
-        function showToast(m, t) {
-            const toast = document.getElementById('toast');
-            const msgEl = document.getElementById('toastMessage');
-            if(!msgEl) return;
-            msgEl.textContent = m;
-            const icon = document.getElementById('toastIcon');
-            if(icon) {
-                icon.className = t==='success' ? 'fa-solid fa-circle-check text-green-400' : (t==='error' ? 'fa-solid fa-circle-xmark text-red-400' : 'fa-solid fa-circle-info text-blue-400');
-            }
-            toast.classList.remove('translate-y-20', 'opacity-0');
-            setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 3000);
-        }
+        function closeDateModal() { document.getElementById('dateModal').classList.add('opacity-0'); setTimeout(() => document.getElementById('dateModal').classList.add('hidden'), 200); }
+        function saveDateModal() { const ds = document.getElementById('dateModalDateStr').value; const n = document.getElementById('dateModalNote').value.trim(); const l = document.getElementById('dateModalLocked').checked; if (!n && !l) delete dateSettings[ds]; else dateSettings[ds] = { note: n, locked: l }; closeDateModal(); renderTable(); }
     </script>
 </body>
 </html>
