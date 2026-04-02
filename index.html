@@ -13,13 +13,13 @@
         
         /* 手機版固定欄位寬度調整 */
         :root {
-            --name-col-w: 70px;
-            --leave-col-w: 40px;
+            --name-col-w: 60px;
+            --leave-col-w: 36px;
         }
         @media (min-width: 640px) {
             :root {
-                --name-col-w: 80px;
-                --leave-col-w: 45px;
+                --name-col-w: 65px;
+                --leave-col-w: 40px;
             }
         }
 
@@ -572,7 +572,7 @@
                     headerRow.innerHTML += `<th class="w-[44px] min-w-[44px] border-b border-r text-center relative align-top ${bg} ${currentRole === 'admin' ? 'cursor-pointer' : ''}" ${currentRole === 'admin' ? `onclick="openDateModal('${ds}')"` : ''}>
                         <div class="text-[9px] scale-90 ${tc}">${['日','一','二','三','四','五','六'][wk]}</div>
                         <div class="font-bold text-[10px]">${d.getDate()}</div>
-                        ${noteText ? `<div class="text-[8px] text-amber-800 scale-75 leading-none mt-0.5 truncate">${noteText}</div>` : ''}
+                        ${noteText ? `<div class="text-[10px] text-amber-700 font-bold leading-tight mt-0.5 truncate px-0.5">${noteText}</div>` : ''}
                     </th>`;
                 });
             }
