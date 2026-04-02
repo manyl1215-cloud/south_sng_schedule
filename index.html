@@ -131,10 +131,15 @@
                 <span id="currentMonthDisplay" class="font-bold text-sm min-w-[80px] text-center"></span>
                 <button onclick="changeMonth(1)" class="p-1.5 text-slate-600"><i class="fa-solid fa-chevron-right"></i></button>
             </div>
-            <!-- 儲存按鈕 -->
-            <button onclick="saveDataWithSync()" class="bg-blue-600 text-white px-3 py-1.5 rounded-md text-xs font-bold shadow-md flex items-center">
-                <i class="fa-solid fa-cloud-arrow-up mr-1"></i>儲存班表
-            </button>
+            <!-- 按鈕區 -->
+            <div class="flex gap-2">
+                <button onclick="copyToExcel()" class="bg-emerald-600 text-white px-2.5 py-1.5 rounded-md text-xs font-bold shadow-md flex items-center hover:bg-emerald-700 transition">
+                    <i class="fa-solid fa-copy mr-1"></i>複製
+                </button>
+                <button onclick="saveDataWithSync()" class="bg-blue-600 text-white px-3 py-1.5 rounded-md text-xs font-bold shadow-md flex items-center hover:bg-blue-700 transition">
+                    <i class="fa-solid fa-cloud-arrow-up mr-1"></i>儲存班表
+                </button>
+            </div>
         </div>
 
         <div class="flex items-center justify-between">
@@ -678,6 +683,64 @@
             icon.className = t==='success' ? 'fa-solid fa-circle-check text-green-400' : (t==='error' ? 'fa-solid fa-circle-xmark text-red-400' : 'fa-solid fa-circle-info text-blue-400');
             toast.classList.remove('opacity-0', 'scale-90'); 
             setTimeout(() => toast.classList.add('opacity-0', 'scale-90'), 2500); 
+        }
+
+        function copyToExcel() {
+            const { start, end } = getSchedulePeriod(currentYear, currentMonth);
+            const dates = [];
+            let loop = new Date(start);
+            while (loop <= end) { dates.push(new Date(loop)); loop.setDate(loop.getDate() + 1); }
+
+            // 建立 Excel 支援的 TSV (Tab-Separated Values) 格式字串
+            let tsv = "姓名\t休假";
+            dates.forEach(d => {
+                const wk = ['日','一','二','三','四','五','六'][d.getDay()];
+                tsv += `\t${d.getMonth() + 1}/${d.getDate()}(${wk})`;
+            });
+            tsv += "\n";
+
+            // 寫入各員工資料
+            employees.forEach(empObj => {
+                const emp = empObj.name;
+                const empData = scheduleData[emp] || {};
+                let count = 0, pCount = 0;
+                dates.forEach(d => { 
+                    const s = empData[formatDateStr(d)] || ''; 
+                    if (leaveShifts.includes(s)) count++; 
+                    if (s === '排休') pCount++; 
+                });
+
+                tsv += `${emp}\t${count + pCount}`;
+                dates.forEach(date => {
+                    const ds = formatDateStr(date);
+                    const shift = empData[ds] || '';
+                    tsv += `\t${shift}`;
+                });
+                tsv += "\n";
+            });
+
+            // 寫入底部統計
+            tsv += "合計\t上班";
+            dates.forEach(date => {
+                const ds = formatDateStr(date);
+                let count = 0;
+                employees.forEach(e => { if (workingShifts.includes(scheduleData[e.name]?.[ds])) count++; });
+                tsv += `\t${count}`;
+            });
+            tsv += "\n";
+
+            // 建立隱藏的 textarea 來執行複製動作 (相容性最佳的寫法)
+            const textarea = document.createElement('textarea');
+            textarea.value = tsv;
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                showToast('已複製班表，可直接貼上至 Excel！', 'success');
+            } catch (err) {
+                showToast('複製失敗，請確認瀏覽器權限', 'error');
+            }
+            document.body.removeChild(textarea);
         }
 
         function updateTodayRoster() {
