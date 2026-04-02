@@ -310,91 +310,147 @@
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>處理中';
             btn.disabled = true;
 
-            const monthKey = `${currentYear}-${currentMonth}`;
-            showToast('正在與雲端同步...', 'info');
-
             try {
-                const getResp = await fetch(`${API_URL}?month=${monthKey}&_t=${Date.now()}`);
-                const getRes = await getResp.json();
-                
-                if (getRes.status === 'success') {
-                    // 1. 取得雲端最新資料並全面強制日期正規化 (解決時差與格式不對稱導致讀不到別人假表的問題)
-                    let serverSchedule = {};
-                    if (getRes.scheduleData) {
-                        for (const emp in getRes.scheduleData) {
-                            serverSchedule[emp] = {};
-                            for (let dKey in getRes.scheduleData[emp]) {
-                                serverSchedule[emp][normalizeDateStr(dKey)] = getRes.scheduleData[emp][dKey];
-                            }
-                        }
-                    }
-                    
-                    let serverDateSettings = {};
-                    if (getRes.dateSettings) {
-                        for (let dKey in getRes.dateSettings) {
-                            serverDateSettings[normalizeDateStr(dKey)] = getRes.dateSettings[dKey];
-                        }
-                    }
-
-                    let serverLocked = getRes.isMonthLocked !== undefined ? getRes.isMonthLocked : true;
-
-                    // 2. 智慧合併：只將本地「有更動過」的資料覆蓋上去，避免刪除別人的進度
-                    // 合併班表
-                    for (const emp in pendingChanges.schedule) {
-                        if (!serverSchedule[emp]) serverSchedule[emp] = {};
-                        for (const ds in pendingChanges.schedule[emp]) {
-                            serverSchedule[emp][ds] = pendingChanges.schedule[emp][ds];
-                        }
-                    }
-                    scheduleData = serverSchedule;
-
-                    // 合併日期設定
-                    for (const ds in pendingChanges.dateSettings) {
-                        if (pendingChanges.dateSettings[ds] === null) {
-                            delete serverDateSettings[ds];
-                        } else {
-                            serverDateSettings[ds] = pendingChanges.dateSettings[ds];
-                        }
-                    }
-                    dateSettings = serverDateSettings;
-
-                    // 合併鎖定狀態
-                    if (pendingChanges.lockedMonths[monthKey] !== undefined) {
-                        lockedMonths[monthKey] = pendingChanges.lockedMonths[monthKey];
-                    } else {
-                        lockedMonths[monthKey] = serverLocked;
-                    }
-                }
-
-                const { start, end } = getSchedulePeriod(currentYear, currentMonth);
-                const datesInPeriod = [];
-                let loop = new Date(start);
-                while (loop <= end) { datesInPeriod.push(formatDateStr(loop)); loop.setDate(loop.getDate() + 1); }
-
-                const postResp = await fetch(API_URL, {
-                    method: 'POST',
-                    mode: 'cors',
-                    body: JSON.stringify({
-                        monthKey, 
-                        isMonthLocked: lockedMonths[monthKey] !== undefined ? lockedMonths[monthKey] : true,
-                        dateSettings, dates: datesInPeriod, scheduleData
-                    })
-                });
-                
-                const postRes = await postResp.json();
-                if (postRes.status === 'success') {
-                    showToast('班表儲存成功！', 'success');
-                    pendingChanges = { schedule: {}, dateSettings: {}, lockedMonths: {} }; // 儲存成功後清空變更紀錄
-                } else {
-                    throw new Error();
-                }
+                // 啟動儲存流程，預設重試次數為 0
+                await doSaveProcess(0);
             } catch (err) {
+                console.error(err);
                 showToast('網路錯誤，請重試', 'error');
             } finally {
                 btn.innerHTML = original;
                 btn.disabled = false;
                 renderTable();
             }
+        }
+
+        async function doSaveProcess(retryCount) {
+            const monthKey = `${currentYear}-${currentMonth}`;
+            if (retryCount === 0) {
+                showToast('正在與雲端同步...', 'info');
+            } else {
+                // 如果啟動了防護機制
+                showToast(`偵測到同時寫入衝突，自動補存中(${retryCount})...`, 'info');
+            }
+
+            // 1. 取得雲端最新資料
+            const getResp = await fetch(`${API_URL}?month=${monthKey}&_t=${Date.now()}`);
+            const getRes = await getResp.json();
+            
+            if (getRes.status === 'success') {
+                let serverSchedule = {};
+                if (getRes.scheduleData) {
+                    for (const emp in getRes.scheduleData) {
+                        serverSchedule[emp] = {};
+                        for (let dKey in getRes.scheduleData[emp]) {
+                            serverSchedule[emp][normalizeDateStr(dKey)] = getRes.scheduleData[emp][dKey];
+                        }
+                    }
+                }
+                
+                let serverDateSettings = {};
+                if (getRes.dateSettings) {
+                    for (let dKey in getRes.dateSettings) {
+                        serverDateSettings[normalizeDateStr(dKey)] = getRes.dateSettings[dKey];
+                    }
+                }
+
+                let serverLocked = getRes.isMonthLocked !== undefined ? getRes.isMonthLocked : true;
+
+                // 2. 智慧合併：將本地有更動的資料強制寫入雲端最新版
+                for (const emp in pendingChanges.schedule) {
+                    if (!serverSchedule[emp]) serverSchedule[emp] = {};
+                    for (const ds in pendingChanges.schedule[emp]) {
+                        serverSchedule[emp][ds] = pendingChanges.schedule[emp][ds];
+                    }
+                }
+                scheduleData = serverSchedule;
+
+                for (const ds in pendingChanges.dateSettings) {
+                    if (pendingChanges.dateSettings[ds] === null) {
+                        delete serverDateSettings[ds];
+                    } else {
+                        serverDateSettings[ds] = pendingChanges.dateSettings[ds];
+                    }
+                }
+                dateSettings = serverDateSettings;
+
+                if (pendingChanges.lockedMonths[monthKey] !== undefined) {
+                    lockedMonths[monthKey] = pendingChanges.lockedMonths[monthKey];
+                } else {
+                    lockedMonths[monthKey] = serverLocked;
+                }
+            }
+
+            // 3. 準備送出
+            const { start, end } = getSchedulePeriod(currentYear, currentMonth);
+            const datesInPeriod = [];
+            let loop = new Date(start);
+            while (loop <= end) { datesInPeriod.push(formatDateStr(loop)); loop.setDate(loop.getDate() + 1); }
+
+            const postResp = await fetch(API_URL, {
+                method: 'POST',
+                mode: 'cors',
+                body: JSON.stringify({
+                    monthKey, 
+                    isMonthLocked: lockedMonths[monthKey] !== undefined ? lockedMonths[monthKey] : true,
+                    dateSettings, dates: datesInPeriod, scheduleData
+                })
+            });
+            
+            const postRes = await postResp.json();
+            if (postRes.status !== 'success') throw new Error('POST Failed');
+
+            // 4. 多人同時寫入防護機制 (自動檢查與重試)
+            const hasChanges = Object.keys(pendingChanges.schedule).length > 0 || 
+                               Object.keys(pendingChanges.dateSettings).length > 0 || 
+                               Object.keys(pendingChanges.lockedMonths).length > 0;
+                               
+            if (hasChanges) {
+                // 隨機等待 1~2 秒，讓伺服器寫入穩定，並錯開多人的檢查時間
+                await new Promise(r => setTimeout(r, 1000 + Math.random() * 1000));
+                
+                const verifyResp = await fetch(`${API_URL}?month=${monthKey}&_t=${Date.now()}`);
+                const verifyRes = await verifyResp.json();
+                
+                let needRetry = false;
+                let vSchedule = {};
+                // 正規化驗收的資料
+                if (verifyRes.scheduleData) {
+                    for (const emp in verifyRes.scheduleData) {
+                        vSchedule[emp] = {};
+                        for (let dKey in verifyRes.scheduleData[emp]) {
+                            vSchedule[emp][normalizeDateStr(dKey)] = verifyRes.scheduleData[emp][dKey];
+                        }
+                    }
+                }
+                
+                // 檢查剛才我修改的內容，是否依然存在於雲端 (防護別人剛好覆蓋掉我的)
+                for (const emp in pendingChanges.schedule) {
+                    for (const ds in pendingChanges.schedule[emp]) {
+                        const myVal = pendingChanges.schedule[emp][ds];
+                        const serverVal = (vSchedule[emp] && vSchedule[emp][ds]) ? vSchedule[emp][ds] : '';
+                        if (myVal !== serverVal) needRetry = true;
+                    }
+                }
+                
+                // 如果發現不一致，自動重啟補存流程
+                if (needRetry) {
+                    if (retryCount < 2) { // 最多自動補救 2 次
+                        return await doSaveProcess(retryCount + 1); 
+                    } else {
+                        showToast('多人同時寫入發生嚴重衝突，請稍後重新確認班表', 'error');
+                    }
+                }
+            }
+
+            // 5. 成功結束
+            if (retryCount === 0 || !hasChanges) {
+                showToast('班表儲存成功！', 'success');
+            } else {
+                showToast('已自動修復被覆蓋的資料並儲存成功！', 'success');
+            }
+            // 清空本地待存異動
+            pendingChanges = { schedule: {}, dateSettings: {}, lockedMonths: {} }; 
         }
 
         async function loadMonthData(year, month) {
